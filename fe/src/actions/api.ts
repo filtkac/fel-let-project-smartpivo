@@ -61,3 +61,18 @@ export async function getAlcoholRecords(userId: number) {
   const response = await fetch(`${apiRoot}/users/${userId}/alcohol-records`);
   return (await response.json()) as AlcoholRecord[];
 }
+
+export async function getLatestAlcoholRecords(userId: number) {
+  const response = await fetch(`${apiRoot}/users/${userId}/alcohol-records/latest`);
+  return (await response.json()) as AlcoholRecord[];
+}
+
+export async function startBreathTest() {
+  const response = await fetch(
+    `${apiRoot}/start-breath-test`, {
+      method: 'POST'
+    }
+  )
+
+  return (await response.text());
+}

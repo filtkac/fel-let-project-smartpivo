@@ -125,7 +125,7 @@ export default function BeerRecords() {
   }), [activeUser]);
 
   return (
-    <div className="bg-slate-200 rounded-lg p-6 lg:w-1/2 w-full" style={{ minHeight: 400 }}>
+    <div className="bg-slate-200 rounded-lg p-6 w-full" style={{ height: '40vh' }}>
       <Line data={chartData} options={options}/>
     </div>
   )

@@ -15,19 +15,28 @@ import sensors
 models.Base.metadata.create_all(bind=database.engine)
 
 active_user_id = Value("i", -1)
+"""
+0 = nothing
+1 = waiting for confirmation
+2 = measuring
+"""
+breath_test_status = Value("i", 0)
+stop_flag = Value("b", False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global active_user_id
-    sensors_process = Process(target=sensors.main, args=(active_user_id,))
+    global active_user_id, breath_test_status, stop_flag
+    sensors_process = Process(target=sensors.main, args=(active_user_id, breath_test_status, stop_flag))
     sensors_process.start()
-
     yield
-    if sensors_process.is_alive():
-        sensors_process.terminate()
-        sensors_process.join()
+
+    stop_flag.value = True
+
+    sensors_process.join()
     del active_user_id
+    del breath_test_status
+    del stop_flag
 
 
 app = FastAPI(lifespan=lifespan)
@@ -91,3 +100,16 @@ def get_latest_beer_records(user_id: int, db: Session = Depends(database.get_db)
 @app.get("/users/{user_id}/alcohol-records")
 def get_alcohol_records(user_id: int, db: Session = Depends(database.get_db)):
     return crud.get_alcohol_records(db, user_id=user_id)
+
+
+@app.get("/users/{user_id}/alcohol-records/latest")
+def get_latest_alcohol_records(user_id: int, db: Session = Depends(database.get_db)):
+    return crud.get_latest_alcohol_records(db, user_id=user_id)
+
+
+@app.post("/start-breath-test")
+def start_breath_test():
+    if breath_test_status.value != 0:
+        return "Test ještě probíhá."
+    breath_test_status.value = 1
+    return ""

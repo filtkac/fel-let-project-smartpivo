@@ -4,6 +4,8 @@ import ActiveUsers from '@/components/ActiveUsers';
 import BeerRecords from '@/components/BeerRecords';
 import AlcoholRecords from '@/components/AlcoholRecords';
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const users = await getUsers();
 

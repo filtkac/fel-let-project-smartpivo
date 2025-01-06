@@ -1,7 +1,7 @@
 'use client';
 
 import useStore from '@/store/store';
-import { Scatter } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import {
   CategoryScale,
   Chart,
@@ -16,40 +16,87 @@ import {
   Title,
   Tooltip
 } from 'chart.js';
-import { useEffect, useState } from 'react';
-import { getAlcoholRecords } from '@/actions/api';
+import { useEffect, useMemo, useState } from 'react';
+import { getAlcoholRecords, getLatestAlcoholRecords, startBreathTest } from '@/actions/api';
 import 'chartjs-adapter-date-fns';
-import { AlcoholRecord } from '@/actions/types';
 
 Chart.register(CategoryScale, LinearScale, TimeScale, PointElement, LineElement, Title, Tooltip, Legend, ...registerables);
 
+const emptyChartDataState: ChartData<'line'> = {
+  datasets: [
+    {
+      label: `Alkohol`,
+      data: [],
+      fill: false,
+      borderColor: 'rgb(0, 180, 0)',
+      pointRadius: 0,
+      tension: 0.2
+    }
+  ],
+};
 
 export default function AlcoholRecords() {
   const { activeUser } = useStore();
-  const [alcoholRecords, setAlcoholRecords] = useState<AlcoholRecord[]>([]);
+  const [, setAlcoholRecordsIds] = useState<number[]>([]);
+  const [chartData, setChartData] = useState<ChartData<'line'>>(emptyChartDataState)
 
   useEffect(() => {
     if (activeUser) {
-      getAlcoholRecords(activeUser.id).then((res) => setAlcoholRecords(res));
-    }
-  }, [activeUser, setAlcoholRecords]);
+      getAlcoholRecords(activeUser.id).then((res) => {
+        setAlcoholRecordsIds(res.map(r => r.id));
+        setChartData((prevChartData) => ({
+          ...prevChartData,
+          datasets: [
+            {
+              ...prevChartData.datasets[0],
+              data: res.map(r => ({ x: r.timestamp * 1000, y: r.alcohol })),
+            }
+          ]
+        }));
+      });
 
-  const data: ChartData<'scatter'> = {
-    datasets: [
-      {
-        label: `Alkohol`,
-        data: alcoholRecords.map(r => ({
-          x: r.timestamp * 1000, y: r.alcohol
-        })),
-        fill: false,
-        borderColor: 'rgb(0, 180, 0)',
-        pointRadius: 0,
-        tension: 0.2
+      const interval = setInterval(() => getLatestAlcoholRecords(activeUser.id)
+        .then((latest) => {
+          setAlcoholRecordsIds((prev) => {
+            const latestSliceIds = prev.slice(-300);
+            const toAdd = latest.filter(r => !latestSliceIds.includes(r.id));
+            if (toAdd.length > 0) {
+              setChartData((prevChartData) => {
+                const oldData = prevChartData.datasets[0].data;
+                const pointsToAdd = toAdd.map(r => ({ x: r.timestamp * 1000, y: r.alcohol }));
+                return {
+                  ...prevChartData,
+                  datasets: [
+                    {
+                      ...prevChartData.datasets[0],
+                      data: [...oldData, ...pointsToAdd]
+                    }
+                  ]
+                }
+              });
+              return [...prev, ...toAdd.map(r => r.id)]
+            }
+            return prev;
+          });
+        }), 3000);
+
+      return () => clearInterval(interval);
+    } else {
+      setAlcoholRecordsIds([]);
+      setChartData(emptyChartDataState);
+    }
+  }, [activeUser, setAlcoholRecordsIds]);
+
+  const handleStartBreathTest = () => {
+    startBreathTest().then(res => {
+      const text = res.replaceAll('"', '');
+      if (text.length > 0) {
+        alert(text);
       }
-    ],
+    })
   }
 
-  const options: ChartOptions<'scatter'> = {
+  const options: ChartOptions<'line'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     hover: {
@@ -84,11 +131,19 @@ export default function AlcoholRecords() {
         },
       }
     }
-  }
+  }), [activeUser]);
 
   return (
-    <div className="bg-slate-200 rounded-lg p-6 lg:w-1/2 w-full" style={{minHeight: 400}}>
-      <Scatter data={data} options={options}/>
+    <div className="flex flex-col w-full items-center">
+      <div className="self-stretch bg-slate-200 rounded-lg p-6 w-full" style={{ height: '40vh' }}>
+        <Line data={chartData} options={options}/>
+      </div>
+      <button
+        className="px-3 py-2 mt-3 rounded-md bg-slate-600 text-white hover:bg-slate-700"
+        onClick={handleStartBreathTest}
+      >
+        Dechová zkouška
+      </button>
     </div>
   )
 }
